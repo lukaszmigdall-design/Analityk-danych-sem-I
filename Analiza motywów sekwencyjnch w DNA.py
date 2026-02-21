@@ -25,6 +25,9 @@ class DNAmotyw:
 
     asdadasdas
     1
+    2
+    3
+
 
     print(
 
