@@ -23,3 +23,10 @@ class DNAmotyw:
 
     @staticmethod:
 
+    asdadasdas
+    1
+
+    print(
+
+    )
+
