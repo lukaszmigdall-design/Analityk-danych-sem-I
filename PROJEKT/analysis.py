@@ -2,6 +2,18 @@ import numpy as np
 import pandas as pd
 
 
+
+
+#poprawność danych tj czy mamy DNA
+def validate_dna(sequence):
+    allowed = set("ATGC")
+    sequence = sequence.upper()
+
+    for base in sequence:
+        if base not in allowed:
+            return False
+    return True
+
 #motyw
 def find_motif(sequence, motif):
     positions = []
@@ -32,6 +44,8 @@ def segment_sequence_multiple(sequence, motifs, segment_size=100):
         "Segment": np.arange(len(segments)),
         "Start": np.arange(0, len(sequence), segment_size)
     }
+
+
 #motywy
     for motif in motifs:
         counts = [seg.count(motif) for seg in segments]
@@ -56,3 +70,41 @@ def segment_sequence_multiple(sequence, motifs, segment_size=100):
 
     df = pd.DataFrame(data)
     return df
+
+#wyspy CpG
+def find_cpg_islands(sequence, window_size=200):
+
+    islands = []
+
+    for i in range(len(sequence) - window_size):
+
+        window = sequence[i:i+window_size]
+
+        c = window.count("C")
+        g = window.count("G")
+        cg = window.count("CG")
+
+        if len(window) == 0:
+            continue
+
+        gc_content = (c + g) / len(window)
+
+        expected = (c * g) / len(window) if len(window) > 0 else 0
+
+        if expected == 0:
+            ratio = 0
+        else:
+            ratio = cg / expected
+
+        if gc_content >= 0.5 and ratio >= 0.6:
+
+            islands.append({
+                "Start": i,
+                "End": i + window_size,
+                "GC_content": round(gc_content * 100, 2),
+                "CpG_ratio": round(ratio, 2)
+            })
+
+    return islands
+
+

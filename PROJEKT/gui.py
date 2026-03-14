@@ -1,10 +1,12 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-
+from analysis import validate_dna
 from loader import load_sequence_from_file, load_sequence_from_ncbi
 from analysis import find_motif, segment_sequence_multiple, gc_content
 from visualization import draw_plot
-
+from visualization import draw_heatmap
+from analysis import find_cpg_islands
+from visualization import draw_genome_map
 
 class DNAApp:
 
@@ -196,6 +198,12 @@ class DNAApp:
                        style="Warning.TButton",
                        command=self.export_csv).grid(row=3, column=1, pady=5)
 
+            ttk.Button(control_frame,
+                       text="Eksport PDF",
+                       style="Warning.TButton",
+                       command=self.export_pdf).grid(row=4, column=1, pady=5)
+
+
             # =========================
             # ZAKŁADKI
             # =========================
@@ -239,7 +247,48 @@ class DNAApp:
             self.result_text = tk.Text(self.tab_stats)
             self.result_text.grid(row=0, column=0, sticky="nsew")
 
+            # ===== Zakładka 4 – Heatmapa =====
+            self.tab_heatmap = ttk.Frame(self.notebook)
+            self.notebook.add(self.tab_heatmap, text="Heatmapa motywów w sekwencji DNA")
 
+            self.tab_heatmap.rowconfigure(0, weight=1)
+            self.tab_heatmap.columnconfigure(0, weight=1)
+
+            self.heatmap_frame = ttk.Frame(self.tab_heatmap)
+            self.heatmap_frame.grid(row=0, column=0, sticky="nsew")
+
+            # ===== Zakładka CpG =====
+
+            self.tab_cpg = ttk.Frame(self.notebook)
+            self.notebook.add(self.tab_cpg, text="CpG Islands")
+
+            self.tab_cpg.rowconfigure(0, weight=1)
+            self.tab_cpg.columnconfigure(0, weight=1)
+
+            self.cpg_tree = ttk.Treeview(self.tab_cpg, show="headings")
+
+            self.cpg_tree["columns"] = ("Start", "End", "GC_content", "CpG_ratio")
+
+            for col in self.cpg_tree["columns"]:
+             self.cpg_tree.heading(col, text=col)
+
+            self.cpg_tree.grid(row=0, column=0, sticky="nsew")
+
+            scroll = ttk.Scrollbar(self.tab_cpg, orient="vertical",
+                           command=self.cpg_tree.yview)
+
+            self.cpg_tree.configure(yscrollcommand=scroll.set)
+            scroll.grid(row=0, column=1, sticky="ns")
+
+            # ===== Zakładka Mapa Genomu =====
+            self.tab_genome = ttk.Frame(self.notebook)
+            self.notebook.add(self.tab_genome, text="Mapa genomu")
+
+            self.tab_genome.rowconfigure(0, weight=1)
+            self.tab_genome.columnconfigure(0, weight=1)
+
+            self.genome_frame = ttk.Frame(self.tab_genome)
+            self.genome_frame.grid(row=0, column=0, sticky="nsew")
 
 
 
@@ -275,7 +324,20 @@ class DNAApp:
 
         self.results_df = segment_sequence_multiple(self.sequence, motifs)
         total_gc = gc_content(self.sequence)
-#statystyki tekstowe
+
+        #sprawdzanie sekwencji
+        if not validate_dna(self.sequence):
+            from tkinter import messagebox
+
+            messagebox.showerror(
+                "Błąd sekwencji",
+                "Plik zawiera znaki inne niż A, T, G, C.\nTo nie jest poprawna sekwencja DNA."
+            )
+
+            return
+
+
+        #statystyki tekstowe
         self.result_text.delete("1.0", tk.END)
         self.result_text.insert(tk.END,
                                 f"Długość sekwencji: {len(self.sequence)}\n")
@@ -305,8 +367,32 @@ class DNAApp:
                                 self.results_df,
                                 motifs,
                                 self.canvas)
+        #heatmapa
+        draw_heatmap(self.heatmap_frame, self.results_df, motifs)
 
-    # =============================
+        # ===== CpG islands =====
+
+        islands = find_cpg_islands(self.sequence)
+
+        for row in self.cpg_tree.get_children():
+            self.cpg_tree.delete(row)
+
+        for island in islands:
+            self.cpg_tree.insert("", "end", values=(
+                island["Start"],
+                island["End"],
+                island["GC_content"],
+                island["CpG_ratio"]
+            ))
+
+        draw_genome_map(
+            self.genome_frame,
+            self.results_df,
+            motifs,
+            islands
+        )
+
+    # =============================CSV===========================
     def export_csv(self):
 
         if self.results_df is None:
@@ -320,3 +406,63 @@ class DNAApp:
         if save_path:
             self.results_df.to_csv(save_path, index=False)
             messagebox.showinfo("Sukces", "Zapisano CSV")
+
+
+    #======================================= PDF=================
+    def export_pdf(self):
+
+        from tkinter import filedialog
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen import canvas
+
+        if self.results_df is None:
+            messagebox.showerror("Błąd", "Najpierw wykonaj analizę!")
+
+            return
+
+        file_path = filedialog.asksaveasfilename(
+            defaultextension=".pdf",
+            filetypes=[("PDF file", "*.pdf")]
+        )
+
+        if not file_path:
+            return
+
+        c = canvas.Canvas(file_path, pagesize=A4)
+
+        y = 800
+
+        c.setFont("Helvetica", 12)
+        c.drawString(50, y, "DNA Motif Analysis Report")
+
+        y -= 40
+        c.drawString(50, y, f"Długość sekwencji: {len(self.sequence)}")
+
+        y -= 30
+        c.drawString(50, y, "Motywy:")
+
+        y -= 20
+
+        for motif in self.results_df.columns:
+            if motif not in ["Segment", "Start", "GC_content_%"]:
+                total = self.results_df[motif].sum()
+                c.drawString(70, y, f"{motif}: {total}")
+                y -= 20
+
+        y -= 20
+        c.drawString(50, y, "GC content segments")
+
+        y -= 20
+
+        for i, row in self.results_df.head(20).iterrows():
+
+            text = f"Segment {row['Segment']}  GC% {row['GC_content_%']}"
+            c.drawString(70, y, text)
+
+            y -= 15
+
+            if y < 50:
+                c.showPage()
+                y = 800
+
+        c.save()
