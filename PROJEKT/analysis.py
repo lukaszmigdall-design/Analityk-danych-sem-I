@@ -14,6 +14,7 @@ def validate_dna(sequence):
             return False
     return True
 
+
 #motyw
 def find_motif(sequence, motif):
     positions = []
@@ -108,3 +109,90 @@ def find_cpg_islands(sequence, window_size=200):
     return islands
 
 
+#Transkrypcja i translacja
+def dna_to_rna(sequence):
+    sequence = sequence.upper()
+    rna = sequence.replace("T", "U")
+    return rna
+
+codon_table = {
+
+"AUG":"M",
+
+"UUU":"F","UUC":"F",
+"UUA":"L","UUG":"L",
+"CUU":"L","CUC":"L","CUA":"L","CUG":"L",
+
+"AUU":"I","AUC":"I","AUA":"I",
+
+"GUU":"V","GUC":"V","GUA":"V","GUG":"V",
+
+"UCU":"S","UCC":"S","UCA":"S","UCG":"S",
+
+"CCU":"P","CCC":"P","CCA":"P","CCG":"P",
+
+"ACU":"T","ACC":"T","ACA":"T","ACG":"T",
+
+"GCU":"A","GCC":"A","GCA":"A","GCG":"A",
+
+"UAU":"Y","UAC":"Y",
+
+"CAU":"H","CAC":"H",
+
+"CAA":"Q","CAG":"Q",
+
+"AAU":"N","AAC":"N",
+
+"AAA":"K","AAG":"K",
+
+"GAU":"D","GAC":"D",
+
+"GAA":"E","GAG":"E",
+
+"UGU":"C","UGC":"C",
+
+"UGG":"W",
+
+"CGU":"R","CGC":"R","CGA":"R","CGG":"R",
+
+"AGU":"S","AGC":"S",
+
+"AGA":"R","AGG":"R",
+
+"GGU":"G","GGC":"G","GGA":"G","GGG":"G",
+
+"UAA":"*","UAG":"*","UGA":"*"
+}
+
+def rna_to_protein(rna):
+    protein = ""
+    for i in range(0, len(rna) - 2, 3):
+        codon = rna[i:i+3]
+        amino_acid = codon_table.get(codon, "X")
+        protein += amino_acid
+    return protein
+
+
+def find_orfs(rna):
+
+    start = "AUG"
+    stops = ["UAA","UAG","UGA"]
+
+    orfs = []
+
+    for i in range(0,len(rna)-3):
+
+        codon = rna[i:i+3]
+
+        if codon == start:
+
+            for j in range(i+3,len(rna)-3,3):
+
+                stop = rna[j:j+3]
+
+                if stop in stops:
+
+                    orfs.append((i,j+3))
+                    break
+
+    return orfs

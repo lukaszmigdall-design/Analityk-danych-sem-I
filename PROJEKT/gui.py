@@ -1,12 +1,21 @@
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
-from analysis import validate_dna
+
+
 from loader import load_sequence_from_file, load_sequence_from_ncbi
-from analysis import find_motif, segment_sequence_multiple, gc_content
-from visualization import draw_plot
-from visualization import draw_heatmap
-from analysis import find_cpg_islands
-from visualization import draw_genome_map
+from analysis import validate_dna, dna_to_rna, rna_to_protein,  find_motif, segment_sequence_multiple, gc_content, find_orfs, find_cpg_islands
+from visualization import draw_plot, draw_heatmap, draw_genome_map
+
+
+# słownik motywów z opisami
+MOTIF_DESCRIPTIONS = {
+    "ATG": "Kod startowy translacji (metionina)",
+    "TATA": "TATA-box – element promotora w DNA",
+    "CGCG": "Region bogaty w CpG, może wskazywać wyspy CpG",
+    "AATAAA": "Sygnał poliadenylacji mRNA",
+}
+
+
 
 class DNAApp:
 
@@ -31,7 +40,7 @@ class DNAApp:
         # Motyw
         style.theme_use("clam")
 
-        # Globalna czcionka
+        #  czcionka dla całości
         style.configure(".",
                         font=("Segoe UI", 10))
 
@@ -106,6 +115,34 @@ class DNAApp:
 
         self.update_motif_list(filtered)
 
+    def color_protein(self, protein):
+
+        hydrophobic = "AILMFWV"
+        polar = "STYNQ"
+        acidic = "DE"
+        basic = "KRH"
+
+        for aa in protein:
+
+            if aa in hydrophobic:
+                tag = "hydrophobic"
+
+            elif aa in polar:
+                tag = "polar"
+
+            elif aa in acidic:
+                tag = "acidic"
+
+            elif aa in basic:
+                tag = "basic"
+
+            else:
+                tag = None
+
+            self.translation_text.insert("end", aa, tag)
+
+
+
     # =============================
     def create_widgets(self):
             # =========================
@@ -115,42 +152,50 @@ class DNAApp:
             main_frame = ttk.Frame(self.root)
             main_frame.pack(fill="both", expand=True)
 
+            # konfiguracja proporcji
+            main_frame.columnconfigure(0, weight=1)
+            main_frame.columnconfigure(1, weight=4)
+            main_frame.rowconfigure(0, weight=1)
+
             # ===== LEWA STRONA (motywy) =====
-            left_frame = ttk.Frame(main_frame, width=220)
-            left_frame.pack(side="left", fill="y")
-            left_frame.pack_propagate(False)
+            self.left_frame = ttk.Frame(main_frame, padding=10)
+            self.left_frame.grid(row=0, column=0, sticky="nsew")
 
-            motif_frame = ttk.LabelFrame(left_frame, text="Motywy DNA")
-            motif_frame.pack(fill="both", expand=True, padx=10, pady=10)
+            # ===== PRAWA STRONA =====
+            self.right_frame = ttk.Frame(main_frame, padding=10)
+            self.right_frame.grid(row=0, column=1, sticky="nsew")
 
-            # ===== Pole wyszukiwania =====
-            ttk.Label(motif_frame, text="Szukaj:").pack(pady=(5, 0))
+            self.right_frame.columnconfigure(0, weight=1)
+            self.right_frame.rowconfigure(1, weight=1)
 
-            self.search_var = tk.StringVar()
-            self.search_var.trace("w", self.filter_motifs)
 
-            self.search_entry = ttk.Entry(motif_frame,
-                                          textvariable=self.search_var)
-            self.search_entry.pack(fill="x", padx=5, pady=5)
 
-            # lista motywów
-            scrollbar = ttk.Scrollbar(motif_frame)
-            scrollbar.pack(side="right", fill="y")
+            #==================================================================================
+            # Lista motywów
+            ttk.Label(self.left_frame, text="Motywy DNA", font=("Segoe UI", 12, "bold")).pack(anchor="w")
 
-            self.motif_listbox = tk.Listbox(
-                motif_frame,
-                selectmode=tk.MULTIPLE,
-                yscrollcommand=scrollbar.set,
-                height=20,
-                bd=0,
-                highlightthickness=0
-            )
 
-            self.motif_listbox.pack(fill="both",
-                                    expand=True,
-                                    padx=5,
-                                    pady=5)
-            scrollbar.config(command=self.motif_listbox.yview)
+            self.motif_listbox = tk.Listbox(self.left_frame, height=8)
+            self.motif_listbox.pack(fill="x", pady=5)
+
+            # Wypełnienie motywami
+            for motif in MOTIF_DESCRIPTIONS.keys():
+                self.motif_listbox.insert(tk.END, motif)
+
+            # Bind do wyświetlania opisu
+            self.motif_listbox.bind("<<ListboxSelect>>", self.show_motif_description)
+
+            # Etykieta opisu
+            desc_label = ttk.Label(self.left_frame, text="Opis motywu:")
+            desc_label.pack(anchor="w", pady=(10, 0))
+
+            # Pole tekstowe do opisu
+            self.motif_description = tk.Text(self.left_frame, height=4, wrap="word")
+            self.motif_description.pack(fill="x")
+
+
+
+
 
             self.all_motifs = [
                 "ATG", "TATA", "CGCG", "AATT",
@@ -162,16 +207,12 @@ class DNAApp:
 
 
 
-            # ===== PRAWA STRONA =====
-            right_frame = ttk.Frame(main_frame)
-            right_frame.pack(side="right", fill="both", expand=True)
 
-            right_frame.rowconfigure(1, weight=1)
-            right_frame.columnconfigure(0, weight=1)
+
 
             # ===== Panel sterowania =====
-            control_frame = ttk.LabelFrame(right_frame, text="Dane wejściowe")
-            control_frame.grid(row=0, column=0, sticky="ew", padx=10, pady=10)
+            control_frame = ttk.LabelFrame(self.right_frame, text="Dane wejściowe")
+            control_frame.grid(row=0, column=0, sticky="ew", pady=5)
 
             control_frame.columnconfigure(1, weight=1)
 
@@ -208,8 +249,8 @@ class DNAApp:
             # ZAKŁADKI
             # =========================
 
-            self.notebook = ttk.Notebook(right_frame)
-            self.notebook.grid(row=1, column=0, sticky="nsew", padx=10, pady=10)
+            self.notebook = ttk.Notebook(self.right_frame)
+            self.notebook.grid(row=1, column=0, sticky="nsew")
 
             # ===== Zakładka 1 – Tabela =====
             self.tab_table = ttk.Frame(self.notebook)
@@ -290,6 +331,55 @@ class DNAApp:
             self.genome_frame = ttk.Frame(self.tab_genome)
             self.genome_frame.grid(row=0, column=0, sticky="nsew")
 
+            # ===== Zakładka RNA/Protein =====
+            self.tab_translation = ttk.Frame(self.notebook)
+            self.notebook.add(self.tab_translation, text="RNA / Białko")
+
+            self.translation_text = tk.Text(self.tab_translation)
+            self.translation_text.pack(fill="both", expand=True)
+
+            # kolory aminokwasów
+            self.translation_text.tag_config("hydrophobic", foreground="blue")
+            self.translation_text.tag_config("polar", foreground="green")
+            self.translation_text.tag_config("acidic", foreground="red")
+            self.translation_text.tag_config("basic", foreground="purple")
+
+            self.translation_text.tag_config("start", background="lightgreen")
+            self.translation_text.tag_config("stop", background="pink")
+            self.translation_text.tag_config("orf", background="lightgrey")
+
+            legend_frame = ttk.Frame(self.tab_translation)
+            legend_frame.pack(fill="x", pady=5)
+            self.legend_item(legend_frame, "blue", "Hydrofobowe")
+            self.legend_item(legend_frame, "green", "Polarne")
+            self.legend_item(legend_frame, "red", "Kwaśne")
+            self.legend_item(legend_frame, "purple", "Zasadowe")
+            self.legend_item(legend_frame, "lightgreen", "START")
+            self.legend_item(legend_frame, "pink", "STOP")
+            self.legend_item(legend_frame, "lightgrey", "ORF")
+
+
+
+    def show_motif_description(self, event):
+        # pobierz zaznaczony indeks
+        selected = self.motif_listbox.curselection()
+        if not selected:
+            return  # nic nie zaznaczono
+        index = selected[0]
+
+        # pobierz motyw z listboxa
+        motif = self.motif_listbox.get(index)
+
+        # pobierz opis ze słownika
+        description = MOTIF_DESCRIPTIONS.get(motif, "Brak opisu")
+
+        # wstaw opis do pola tekstowego
+        self.motif_description.delete("1.0", tk.END)
+        self.motif_description.insert(tk.END, description)
+
+
+
+
 
 
     # =============================
@@ -298,14 +388,21 @@ class DNAApp:
         self.file_entry.delete(0, tk.END)
         self.file_entry.insert(0, filename)
 
+
     # =============================
     def analyze(self):
+        from tkinter import messagebox
 
         selected_indices = self.motif_listbox.curselection()
         motifs = [self.motif_listbox.get(i) for i in selected_indices]
 
+
+
         if not motifs:
-            messagebox.showerror("Błąd", "Wybierz przynajmniej jeden motyw!")
+            messagebox.showerror("Błąd",
+                                 "Wybierz przynajmniej jeden motyw DNA\n"
+                                 "Lista motywów jest po lewej stronie"
+                                 )
             return
 
         file_path = self.file_entry.get()
@@ -319,19 +416,22 @@ class DNAApp:
                 messagebox.showerror("Błąd", "Błąd pobierania z NCBI")
                 return
         else:
-            messagebox.showerror("Błąd", "Wybierz źródło danych!")
+            messagebox.showerror("Błąd", "Wybierz źródło danych!\n"
+                                         "zaimportuj poprawny plik FASTA lub.TXT")
             return
 
         self.results_df = segment_sequence_multiple(self.sequence, motifs)
         total_gc = gc_content(self.sequence)
 
-        #sprawdzanie sekwencji
+        #sprawdzanie poprawności sekwencji - czy na pewno to DNA
         if not validate_dna(self.sequence):
             from tkinter import messagebox
 
             messagebox.showerror(
                 "Błąd sekwencji",
-                "Plik zawiera znaki inne niż A, T, G, C.\nTo nie jest poprawna sekwencja DNA."
+                "Plik zawiera znaki inne niż A, T, G, C.\n"
+                "To nie jest poprawna sekwencja do analizy\n"
+                "Sprawdź czy plik nie zawiera sekwencji animokwasowej lub innych oznaczeń zgodnych z IUPAC"
             )
 
             return
@@ -391,6 +491,68 @@ class DNAApp:
             motifs,
             islands
         )
+
+        #RNA do BIAŁKA
+        rna = dna_to_rna(self.sequence)
+        protein = rna_to_protein(rna)
+
+        self.translation_text.delete("1.0", tk.END)
+
+        self.translation_text.insert(tk.END, "DNA:\n")
+        self.translation_text.insert(tk.END, self.sequence[:300] + "\n\n")
+
+        self.translation_text.insert(tk.END, "RNA:\n")
+        self.translation_text.insert(tk.END, rna[:300] + "\n\n")
+
+        self.translation_text.insert(tk.END, "Aminokwasy:\n")
+        self.translation_text.insert(tk.END, protein[:300])
+
+
+        rna = dna_to_rna(self.sequence)
+        protein = rna_to_protein(rna)
+        orfs = find_orfs(rna)
+
+        self.translation_text.delete("1.0", tk.END)
+
+        self.translation_text.insert(tk.END, "RNA:\n")
+
+        for i in range(0, len(rna), 3):
+
+            codon = rna[i:i + 3]
+
+            if codon == "AUG":
+                self.translation_text.insert(tk.END, codon, "start")
+
+            elif codon in ["UAA", "UAG", "UGA"]:
+                self.translation_text.insert(tk.END, codon, "stop")
+
+            else:
+                self.translation_text.insert(tk.END, codon)
+
+        self.translation_text.insert(tk.END, "\n\nAminokwasy:\n")
+
+        self.color_protein(protein)
+
+
+        for start, end in orfs:
+            start_index = f"1.0 + {start} chars"
+            end_index = f"1.0 + {end} chars"
+
+            self.translation_text.tag_add("orf", start_index, end_index)
+
+    def legend_item(self, parent, color, text):
+        frame = tk.Frame(parent)
+        frame.pack(side="left", padx=6)
+
+        color_box = tk.Canvas(frame, width=15, height=15)
+        color_box.create_rectangle(0, 0, 15, 15, fill=color)
+        color_box.pack(side="left")
+
+        tk.Label(frame, text=text).pack(side="left", padx=2)
+
+
+
+
 
     # =============================CSV===========================
     def export_csv(self):
