@@ -13,6 +13,16 @@ MOTIF_DESCRIPTIONS = {
     "TATA": "TATA-box – element promotora w DNA",
     "CGCG": "Region bogaty w CpG, może wskazywać wyspy CpG",
     "AATAAA": "Sygnał poliadenylacji mRNA",
+    "ATTAAA": "Alternatywny sygnał poliadenylacji",
+    "TATAAA": "TATA box – element promotora",
+    "CAAT": "CAAT box – regulator transkrypcji",
+    "GGGCGG": "GC box – miejsce wiązania czynników transkrypcyjnych",
+    "GAATTC": "miejsce cięcia enzymem EcoRI",
+    "GGATCC": "miejsce cięcia enzymem BamHI",
+    "AAGCTT": "miejsce cięcia enzymem HindIII",
+    "ATAT": "Powtarzalny motyw DNA",
+    "TATATA": "Region powtarzalny"
+
 }
 
 
@@ -175,7 +185,7 @@ class DNAApp:
             ttk.Label(self.left_frame, text="Motywy DNA", font=("Segoe UI", 12, "bold")).pack(anchor="w")
 
 
-            self.motif_listbox = tk.Listbox(self.left_frame, height=8)
+            self.motif_listbox = tk.Listbox(self.left_frame, selectmode="extended", height=8)
             self.motif_listbox.pack(fill="x", pady=5)
 
             # Wypełnienie motywami
@@ -198,10 +208,19 @@ class DNAApp:
 
 
             self.all_motifs = [
-                "ATG", "TATA", "CGCG", "AATT",
-                "GGG", "TTT", "CCA", "GATA",
-                "TGG", "CGT", "AAC", "GCGC",
-                "TATATA", "ATAT"
+                   "ATG",
+                    "TATA",
+                    "CGCG",
+                    "AATAAA",
+                    "ATTAAA",
+                     "TATAAA",
+                     "CAAT",
+                     "GGGCGG",
+                     "GAATTC",
+                     "GGATCC",
+                     "AAGCTT",
+                      "ATAT",
+                    "TATATA"
             ]
             self.update_motif_list(self.all_motifs)
 
